@@ -58,6 +58,11 @@ class KLTNet(object):
 		self.unit_affine = tf.expand_dims( self.unit_affine, axis=0 )
 		self.unit_affine = tf.tile( self.unit_affine, tf.stack([self.B, 1, 1]) )
 
+		self.init_affine = tf.convert_to_tensor( [[1.0,0.0,10.0/tf.cast(self.W, 'float32')],[0.0,1.0,10.0/tf.cast(self.H, 'float32')]], tf.float32 )
+		self.init_affine = tf.expand_dims( self.init_affine, axis=0 )
+		self.init_affine = tf.tile( self.init_affine, tf.stack([self.B, 1, 1]) )
+
+
 		self.p = tf.convert_to_tensor( np.zeros([self.B, 6, 1]), tf.float32 ) 
 		
 		
@@ -65,6 +70,7 @@ class KLTNet(object):
 		
 		x_s = (batch_grids[:, 0, :, :] + 1)*0.5*tf.cast(self.W, 'float32') 		
 		x_s = tf.expand_dims( x_s, axis=3 )
+		self.x_s = x_s
 		x_s = tf.layers.conv2d(x_s, filters=1, kernel_size=[3,3], kernel_initializer=tf.constant_initializer( getID(3) ),
 			 padding="VALID" ,name="id", reuse=tf.AUTO_REUSE, trainable=False)
 	
@@ -73,6 +79,14 @@ class KLTNet(object):
 		y_s = tf.layers.conv2d(y_s, filters=1, kernel_size=[3,3], kernel_initializer=tf.constant_initializer( getID(3) ),
 			 padding="VALID" ,name="id", reuse=tf.AUTO_REUSE, trainable=False)
 		
+
+		T_padded = tf.pad( T, [[0,0],[1,1],[1,1],[0,0]], "REFLECT")
+		self.grad_Txs = tf.layers.conv2d( T_padded, filters=1, kernel_size=[3,3], kernel_initializer= tf.constant_initializer( getgradX() ), 
+				padding="VALID", name="grad_Tx", reuse=tf.AUTO_REUSE, trainable=False)
+		self.grad_Tys = tf.layers.conv2d( T_padded, filters=1, kernel_size=[3,3], kernel_initializer= tf.constant_initializer( getgradY() ), 
+				padding="VALID", name="grad_Ty", reuse=tf.AUTO_REUSE, trainable=False)
+
+
 
 		self.grad_Tx = tf.layers.conv2d( T, filters=1, kernel_size=[3,3], kernel_initializer= tf.constant_initializer( getgradX() ), 
 				padding="VALID", name="grad_Tx", reuse=tf.AUTO_REUSE, trainable=False)
@@ -99,14 +113,17 @@ class KLTNet(object):
 		self.H_list.append( self.H_inv )
 		# print( self.Hess.get_shape() )
 
-		for steps in xrange(10):
+		for steps in xrange(1):
 			
 			# print(steps)
 			## Computing warping image
 			self.warp = tf.convert_to_tensor( [self.p[:,0,:]+1, self.p[:,2,:], self.p[:,4,:], self.p[:,1,:], self.p[:,3,:]+1, self.p[:,5,:]] )
 			self.warp = tf.transpose( self.warp, (1,0,2) )		
 			# print( self.warp.get_shape() )
+			
 			I_warped = spatial_transformer_network(I, self.warp)
+			self.I_warped = spatial_transformer_network( I, self.init_affine )
+			self.I = I
 
 			## Computing error image
 			self.diff = tf.layers.conv2d( I_warped - T, filters=1, kernel_size=[3,3], kernel_initializer=tf.constant_initializer( getID(3) ),
