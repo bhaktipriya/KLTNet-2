@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from transformer2 import affine_grid_generator, bilinear_sampler, spatial_transformer_network
+from ops import get_warp
 
 class KLTNet(object):
 	"""docstring for KLTNet"""
@@ -13,7 +14,7 @@ class KLTNet(object):
 		
 		self.is_train = is_train
 
-		self.shape = img1.get_shape()
+		self.shape = img1.get_shape().as_list()
 		self.B = self.shape[0]
 		self.H = self.shape[1]
 		self.W = self.shape[2]
@@ -71,14 +72,19 @@ class KLTNet(object):
 		self.y_s = y_s
 
 		## Initializing parameters with zeros
+		# unity = np.zeros( (self.B,6,1), np.float32 )
+		# unity[:,0,:] = 1.0
+		# unity[:,4,:] = 1.0
+		# self.p = tf.constant( unity )
 		self.p = tf.zeros( (self.B,6,1), tf.float32 )
 
 		for steps in xrange(10):
 			
 			print(steps)
 			## Computing warping image	
-			self.warp = tf.convert_to_tensor( [self.p[:,0,:]+1, self.p[:,2,:], self.p[:,4,:], self.p[:,1,:], self.p[:,3,:]+1, self.p[:,5,:]] )
-			self.warp = tf.transpose( self.warp, (1,0,2) )		
+			# self.warp = tf.convert_to_tensor( [self.p[:,0,:]+1, self.p[:,2,:], self.p[:,4,:], self.p[:,1,:], self.p[:,3,:]+1, self.p[:,5,:]] )
+			# self.warp = tf.transpose( self.warp, (1,0,2) )
+			self.warp = get_warp( self.p )		
 			
 			I_warped = spatial_transformer_network(I, self.warp)
 			I_warped = removeSides(I_warped)
@@ -128,6 +134,8 @@ class KLTNet(object):
 
 			## Updating p
 			self.p = self.p + self.dp
+
+		return (self.p, self.dp)
 			
 
 
